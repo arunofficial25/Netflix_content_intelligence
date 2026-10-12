@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Netflix Content Intelligence Dashboard</title>
+<style>
+:root{--bg:#f5f5f8;--card:#fff;--text:#1b1b1f;--muted:#6b6b76;--border:#e3e3ea;--accent:#e50914;--tv:#3b6ea8;--empty:#e6e6ee;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#111113;--card:#1b1b1f;--text:#ececf1;--muted:#9a9aa6;--border:#2c2c33;--tv:#6aa3e0;--empty:#2b2b32}}
+:root[data-theme="dark"]{--bg:#111113;--card:#1b1b1f;--text:#ececf1;--muted:#9a9aa6;--border:#2c2c33;--tv:#6aa3e0;--empty:#2b2b32}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:Inter,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;font-size:14px}
+.wrap{max-width:1400px;margin:0 auto;padding:16px}
+header{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px;margin-bottom:12px}
+h1{margin:0;font-size:22px;letter-spacing:-.3px}h1 span{color:var(--accent)}
+.sub{color:var(--muted);font-size:12px}
+.filters{display:flex;flex-wrap:wrap;gap:8px;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:10px;margin-bottom:12px;align-items:end}
+.filters label{display:flex;flex-direction:column;font-size:11px;color:var(--muted);gap:3px}
+select,input{background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:7px 8px;font:inherit;min-width:110px}
+input[type=number]{width:80px;min-width:0}input[type=search]{min-width:170px}
+button{background:var(--accent);color:#fff;border:0;border-radius:8px;padding:8px 14px;font:inherit;font-weight:600;cursor:pointer}
+button.ghost{background:transparent;color:var(--text);border:1px solid var(--border);padding:6px 10px}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin:-4px 0 10px;min-height:0}
+.chip{background:var(--card);border:1px solid var(--accent);color:var(--accent);border-radius:99px;padding:2px 10px;font-size:12px;cursor:pointer}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:12px}
+.kpi{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:12px;border-top:3px solid var(--accent)}
+.kpi .l{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.5px}
+.kpi .v{font-size:24px;font-weight:700;margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.kpi .s{color:var(--muted);font-size:11px;margin-top:2px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(330px,1fr));gap:12px;margin-bottom:12px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:12px;min-width:0}
+.card h3{margin:0 0 4px;font-size:14px}.card .hint{color:var(--muted);font-size:11px;margin-bottom:4px}
+.chart{width:100%;height:290px}.map{height:440px}
+.full{grid-column:1/-1}
+#insights ul{margin:6px 0 0;padding-left:18px;line-height:1.6}
+.tw{overflow-x:auto}
+table{border-collapse:collapse;width:100%;min-width:900px}
+th,td{text-align:left;padding:7px 8px;border-bottom:1px solid var(--border);font-size:12.5px;vertical-align:top}
+th{cursor:pointer;color:var(--muted);font-size:11px;text-transform:uppercase;white-space:nowrap;user-select:none}
+th:hover{color:var(--text)}
+.tag{display:inline-block;padding:1px 7px;border-radius:99px;font-size:11px;color:#fff}
+.pager{display:flex;gap:8px;align-items:center;justify-content:flex-end;margin-top:8px;color:var(--muted)}
+#mapmsg{color:var(--muted);padding:20px}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <div><h1><span>N</span> Netflix Content Intelligence Dashboard</h1><div class="sub" id="dataSummary">Loading dashboard data…</div></div>
+  <button class="ghost" id="reset">Reset all filters</button>
+</header>
+<div id="loadError" role="alert" hidden style="background:var(--card);border:1px solid var(--accent);border-radius:8px;color:var(--text);margin-bottom:12px;padding:10px"></div>
+
+<div class="filters">
+  <label>Type<select id="fType"><option value="-1">All</option><option value="0">Movie</option><option value="1">TV Show</option></select></label>
+  <label>Country<select id="fCountry"></select></label>
+  <label>Rating<select id="fRating"></select></label>
+  <label>Genre<select id="fGenre"></select></label>
+  <label>Audience<select id="fAud"></select></label>
+  <label>Release from<input type="number" id="fY0" min="1925" max="2021"></label>
+  <label>to<input type="number" id="fY1" min="1925" max="2021"></label>
+  <label>Search title / director<input type="search" id="fQ" placeholder="e.g. Nolan"></label>
+</div>
+<div class="chips" id="chips"></div>
+
+<div class="kpis" id="kpis"></div>
+
+<div class="card full" style="margin-bottom:12px">
+  <h3>World map — content by country</h3>
+  <div class="hint">Colour shows number of titles (square-root scale). Scroll to zoom, drag to pan, click a country to filter. Historic labels: Soviet Union → Russia, West Germany → Germany.</div>
+  <div id="map" class="chart map"></div><div id="mapmsg" style="display:none"></div>
+</div>
+
+<div class="grid">
+  <div class="card"><h3>Content type split</h3><div id="cType" class="chart"></div></div>
+  <div class="card"><h3>Top 10 countries</h3><div id="cCountry" class="chart"></div></div>
+  <div class="card"><h3>Titles by release year</h3><div id="cRelease" class="chart"></div></div>
+  <div class="card"><h3>Titles added to Netflix per year</h3><div id="cAdded" class="chart"></div></div>
+  <div class="card"><h3>Ratings</h3><div id="cRating" class="chart"></div></div>
+  <div class="card"><h3>Top 12 genres</h3><div id="cGenre" class="chart"></div></div>
+  <div class="card"><h3>Audience mix by content type</h3><div id="cAud" class="chart"></div></div>
+  <div class="card"><h3>Top 10 directors</h3><div id="cDir" class="chart"></div></div>
+  <div class="card"><h3>Movie runtime distribution (min)</h3><div id="cRun" class="chart"></div></div>
+  <div class="card"><h3>TV show seasons</h3><div id="cSea" class="chart"></div></div>
+  <div class="card full" id="insights"><h3>Auto-generated insights (for current filter)</h3><ul id="insList"></ul></div>
+</div>
+
+<div class="card">
+  <h3>Data explorer <span class="sub" id="tCount"></span></h3>
+  <div class="tw"><table><thead id="thead"></thead><tbody id="tbody"></tbody></table></div>
+  <div class="pager"><button class="ghost" id="prev">‹ Prev</button><span id="pageInfo"></span><button class="ghost" id="next">Next ›</button></div>
+</div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/echarts@4.9.0/dist/echarts.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/echarts@4.9.0/map/js/world.js"></script>
+<script type="module">
+let RAW;
+try {
+  const response = await fetch('./data/cleaned/dashboard_data.json');
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  RAW = await response.json();
+  if (!Array.isArray(RAW) || RAW.some(row => !Array.isArray(row) || row.length !== 10)) {
+    throw new Error('The dashboard data file has an invalid format.');
+  }
+  document.getElementById('dataSummary').textContent = `${RAW.length.toLocaleString()} cleaned titles - click any chart element or the map to cross-filter`;
+} catch (error) {
+  const message = document.getElementById('loadError');
+  message.hidden = false;
+  message.textContent = `Could not load dashboard data (${error.message}). Run the Python analysis, then start a local server from the project folder.`;
+  throw error;
+}
+const ROWS = RAW.map(x=>({ti:x[0],t:x[1],d:x[2],c:x[3],ry:x[4],ya:x[5],r:x[6],dv:x[7],gs:x[8],g:x[8].split('|'),a:x[9]}));
+const YEARS=ROWS.map(r=>r.ry), YEAR_MIN=Math.min(...YEARS), YEAR_MAX=Math.max(...YEARS);
+const TYPES=['Movie','TV Show'];
+const AUDS=['Kids','Older Kids','Teens','Adults','Unrated'];
+const AUDCOL=['#2fb36b','#f2b134','#3b8fd9','#e50914','#8a8a96'];
+const S0={type:-1,c:'',r:'',g:'',a:'',y0:YEAR_MIN,y1:YEAR_MAX,q:''};
+let S={...S0}, sortKey='ry', sortDir=-1, page=0, PS=12, F=[];
+const $=id=>document.getElementById(id);
+const css=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const fmt=n=>n.toLocaleString();
+const top=(m,n)=>[...m.entries()].sort((a,b)=>b[1]-a[1]).slice(0,n);
+function count(arr,fn){const m=new Map();for(const r of arr){const k=fn(r);if(k==null)continue;if(Array.isArray(k))k.forEach(x=>m.set(x,(m.get(x)||0)+1));else m.set(k,(m.get(k)||0)+1)}return m}
+const median=a=>{if(!a.length)return 0;const s=[...a].sort((x,y)=>x-y),h=s.length>>1;return s.length%2?s[h]:(s[h-1]+s[h])/2};
+
+// ---------- filter controls ----------
+function fill(id,label,vals){$(id).innerHTML=`<option value="">${label}</option>`+vals.map(v=>`<option>${v}</option>`).join('')}
+fill('fCountry','All countries',[...new Set(ROWS.map(r=>r.c))].sort());
+fill('fRating','All ratings',[...new Set(ROWS.map(r=>r.r))].sort());
+fill('fGenre','All genres',[...new Set(ROWS.flatMap(r=>r.g))].sort());
+fill('fAud','All audiences',AUDS);
+$('fY0').min=YEAR_MIN;$('fY1').min=YEAR_MIN;$('fY0').max=YEAR_MAX;$('fY1').max=YEAR_MAX;
+$('fY0').value=S.y0;$('fY1').value=S.y1;
+const bind=(id,key,conv=v=>v)=>$(id).addEventListener(id==='fQ'?'input':'change',e=>{S[key]=conv(e.target.value);page=0;update()});
+bind('fType','type',Number);bind('fCountry','c');bind('fRating','r');bind('fGenre','g');bind('fAud','a');
+bind('fY0','y0',v=>+v||1925);bind('fY1','y1',v=>+v||2021);bind('fQ','q',v=>v.trim().toLowerCase());
+$('reset').onclick=()=>{S={...S0};sync();page=0;update()};
+function sync(){$('fType').value=S.type;$('fCountry').value=S.c;$('fRating').value=S.r;$('fGenre').value=S.g;$('fAud').value=S.a;$('fY0').value=S.y0;$('fY1').value=S.y1;$('fQ').value=S.q}
+function setF(k,v){S[k]=(S[k]===v)?S0[k]:v;page=0;sync();update()}
+
+// ---------- charts ----------
+const ids=['cType','cCountry','cRelease','cAdded','cRating','cGenre','cAud','cDir','cRun','cSea','map'];
+const CH={};ids.forEach(i=>CH[i]=echarts.init($(i)));
+window.addEventListener('resize',()=>ids.forEach(i=>CH[i].resize()));
+CH.cType.on('click',p=>setF('type',TYPES.indexOf(p.name)));
+CH.cCountry.on('click',p=>setF('c',p.name));
+CH.cRating.on('click',p=>setF('r',p.name));
+CH.cGenre.on('click',p=>setF('g',p.name));
+CH.cAud.on('click',p=>setF('a',p.seriesName));
+CH.cDir.on('click',p=>{S.q=p.name.toLowerCase();page=0;sync();update()});
+CH.cRelease.on('click',p=>{const y=+p.name;S.y0=y;S.y1=y;page=0;sync();update()});
+CH.map.on('click',p=>{const c=(mapReverse[p.name]||p.name);if(COUNTRIES.has(c))setF('c',c)});
+const COUNTRIES=new Set(ROWS.map(r=>r.c));
+
+let mapNames=null,mapReverse={};
+try{mapNames=new Set(echarts.getMap('world').geoJson.features.map(f=>f.properties.name))}catch(e){}
+const ALIAS={'Czech Republic':['Czech Rep.','Czechia'],'South Korea':['Korea','South Korea'],'Soviet Union':['Russia'],'West Germany':['Germany'],
+ 'United States':['United States','United States of America'],'Vietnam':['Vietnam','Viet Nam'],'Hong Kong':['Hong Kong','China'],'Taiwan':['Taiwan'],
+ 'Syria':['Syria'],'Iran':['Iran'],'Russia':['Russia'],'Puerto Rico':['Puerto Rico']};
+function mapName(c){if(!mapNames)return null;if(mapNames.has(c))return c;for(const a of ALIAS[c]||[])if(mapNames.has(a))return a;return null}
+
+function tc(){return{txt:css('--text'),mut:css('--muted'),bor:css('--border'),acc:css('--accent'),tv:css('--tv'),emp:css('--empty')}}
+function base(c){return{textStyle:{color:c.txt},grid:{left:8,right:16,top:28,bottom:8,containLabel:true},tooltip:{trigger:'axis',axisPointer:{type:'shadow'}},legend:{textStyle:{color:c.mut},top:0}}}
+const ax=(c,extra={})=>({axisLine:{lineStyle:{color:c.bor}},axisLabel:{color:c.mut},splitLine:{lineStyle:{color:c.bor}},...extra});
+function hbar(id,entries,c,color){
+  const e=[...entries].reverse();
+  CH[id].setOption({...base(c),legend:{show:false},xAxis:ax(c,{type:'value'}),yAxis:ax(c,{type:'category',data:e.map(x=>x[0]),splitLine:{show:false}}),
+   series:[{type:'bar',data:e.map(x=>x[1]),itemStyle:{color,borderRadius:[0,4,4,0]},label:{show:true,position:'right',color:c.mut}}]},true)}
+
+function renderCharts(){
+  const c=tc();
+  // type donut
+  const tm=count(F,r=>TYPES[r.t]);
+  CH.cType.setOption({textStyle:{color:c.txt},tooltip:{trigger:'item',formatter:'{b}: {c} ({d}%)'},legend:{bottom:0,textStyle:{color:c.mut}},
+   series:[{type:'pie',radius:['48%','72%'],center:['50%','46%'],label:{color:c.txt,formatter:'{b}\n{d}%'},itemStyle:{borderColor:css('--card'),borderWidth:3},
+   data:TYPES.filter(t=>tm.get(t)).map((t,i)=>({name:t,value:tm.get(t),itemStyle:{color:t==='Movie'?c.acc:c.tv}}))}]},true);
+  // countries
+  hbar('cCountry',top(count(F.filter(r=>r.c!=='Unknown'),r=>r.c),10),c,c.acc);
+  // release trend
+  const years=F.map(r=>r.ry);const y0=Math.min(...years),y1=Math.max(...years);
+  const yl=[];for(let y=y0;y<=y1;y++)yl.push(y);
+  const ry=[0,1].map(t=>{const m=count(F.filter(r=>r.t===t),r=>r.ry);return yl.map(y=>m.get(y)||0)});
+  const ser=(nm,d,col,st)=>({name:nm,type:'line',stack:st,data:d,showSymbol:false,smooth:true,areaStyle:{opacity:.35},lineStyle:{width:2},itemStyle:{color:col}});
+  CH.cRelease.setOption({...base(c),tooltip:{trigger:'axis'},xAxis:ax(c,{type:'category',data:yl,boundaryGap:false}),yAxis:ax(c,{type:'value'}),
+   dataZoom:[{type:'inside'}],series:[ser('Movie',ry[0],c.acc,'a'),ser('TV Show',ry[1],c.tv,'a')]},true);
+  // added per year
+  const ad=F.filter(r=>r.ya);const al=[...new Set(ad.map(r=>r.ya))].sort();
+  const am=[0,1].map(t=>{const m=count(ad.filter(r=>r.t===t),r=>r.ya);return al.map(y=>m.get(y)||0)});
+  CH.cAdded.setOption({...base(c),xAxis:ax(c,{type:'category',data:al}),yAxis:ax(c,{type:'value'}),
+   series:[{name:'Movie',type:'bar',stack:'s',data:am[0],itemStyle:{color:c.acc}},{name:'TV Show',type:'bar',stack:'s',data:am[1],itemStyle:{color:c.tv}}]},true);
+  // ratings
+  const rm=top(count(F,r=>r.r),20);
+  CH.cRating.setOption({...base(c),legend:{show:false},xAxis:ax(c,{type:'category',data:rm.map(x=>x[0]),axisLabel:{color:c.mut,rotate:40}}),yAxis:ax(c,{type:'value'}),
+   series:[{type:'bar',data:rm.map(x=>x[1]),itemStyle:{color:c.acc,borderRadius:[4,4,0,0]}}]},true);
+  // genres
+  hbar('cGenre',top(count(F,r=>r.g),12),c,c.tv);
+  // audience by type
+  CH.cAud.setOption({...base(c),xAxis:ax(c,{type:'category',data:TYPES}),yAxis:ax(c,{type:'value'}),
+   series:AUDS.map((a,i)=>({name:a,type:'bar',stack:'s',data:[0,1].map(t=>F.filter(r=>r.t===t&&r.a===a).length),itemStyle:{color:AUDCOL[i]}}))},true);
+  // directors
+  hbar('cDir',top(count(F.filter(r=>r.d!=='Unknown').flatMap(r=>r.d.split(', ').map(d=>({d}))),r=>r.d),10),c,c.acc);
+  // movie runtime
+  const mv=F.filter(r=>r.t===0&&r.dv);const bins=[];for(let b=20;b<=200;b+=10)bins.push(b);
+  const bm=count(mv,r=>Math.min(200,Math.max(20,Math.floor(r.dv/10)*10)));
+  CH.cRun.setOption({...base(c),legend:{show:false},xAxis:ax(c,{type:'category',data:bins.map(b=>b===200?'200+':b)}),yAxis:ax(c,{type:'value'}),
+   series:[{type:'bar',data:bins.map(b=>bm.get(b)||0),barCategoryGap:'8%',itemStyle:{color:c.acc}}]},true);
+  // seasons
+  const sm=count(F.filter(r=>r.t===1),r=>Math.min(8,r.dv));const sl=[1,2,3,4,5,6,7,8];
+  CH.cSea.setOption({...base(c),legend:{show:false},xAxis:ax(c,{type:'category',data:sl.map(s=>s===8?'8+':s)}),yAxis:ax(c,{type:'value'}),
+   series:[{type:'bar',data:sl.map(s=>sm.get(s)||0),itemStyle:{color:c.tv,borderRadius:[4,4,0,0]}}]},true);
+  renderMap(c);
+}
+function renderMap(c){
+  if(!mapNames){$('map').style.display='none';$('mapmsg').style.display='block';
+    $('mapmsg').textContent='World-map geometry could not be loaded in this environment. Top countries: '+top(count(F,r=>r.c),10).map(x=>x.join(' ')).join(', ');return}
+  const agg=new Map();mapReverse={};
+  for(const r of F){const n=mapName(r.c);if(!n)continue;agg.set(n,(agg.get(n)||0)+1);if(!mapReverse[n]||r.c===n)mapReverse[n]=r.c}
+  const data=[...agg].map(([name,n])=>({name,n,value:Math.sqrt(n)}));const mx=Math.max(1,...data.map(d=>d.value));
+  CH.map.setOption({textStyle:{color:c.txt},tooltip:{trigger:'item',formatter:p=>`${p.name}: ${p.data?fmt(p.data.n):0} titles`},
+   visualMap:{min:0,max:mx,text:['More','Fewer'],realtime:false,calculable:false,left:12,bottom:12,textStyle:{color:c.mut},inRange:{color:['#f7c9c9','#e8535b','#a30510']}},
+   series:[{type:'map',map:'world',roam:true,zoom:1.15,itemStyle:{areaColor:c.emp,borderColor:css('--card'),borderWidth:.5},
+    emphasis:{label:{show:false},itemStyle:{areaColor:'#ffb703'}},data}]},true);
+}
+
+// ---------- KPIs / insights ----------
+function renderKPIs(){
+  const n=F.length,mv=F.filter(r=>r.t===0),tv=F.length-mv.length;
+  const kc=count(F.filter(r=>r.c!=='Unknown'),r=>r.c),tcn=top(kc,1)[0],tg=top(count(F,r=>r.g),1)[0];
+  const rt=mv.map(r=>r.dv).filter(Boolean);
+  const K=[['Total titles',fmt(n),`${(n/ROWS.length*100).toFixed(0)}% of catalogue`],
+   ['Movies',fmt(mv.length),n?(mv.length/n*100).toFixed(1)+'%':'–'],['TV Shows',fmt(tv),n?(tv/n*100).toFixed(1)+'%':'–'],
+   ['Countries',fmt(kc.size),'with known origin'],['Top country',tcn?tcn[0]:'–',tcn?fmt(tcn[1])+' titles':''],
+   ['Top genre',tg?tg[0]:'–',tg?fmt(tg[1])+' titles':''],['Median release year',n?median(F.map(r=>r.ry)):'–',''],
+   ['Avg movie runtime',rt.length?Math.round(rt.reduce((a,b)=>a+b,0)/rt.length)+' min':'–',''],
+   ['Adult-rated share',n?(F.filter(r=>r.a==='Adults').length/n*100).toFixed(0)+'%':'–','TV-MA / R / NC-17']];
+  $('kpis').innerHTML=K.map(k=>`<div class="kpi"><div class="l">${k[0]}</div><div class="v" title="${k[1]}">${k[1]}</div><div class="s">${k[2]}</div></div>`).join('');
+}
+function renderInsights(){
+  const n=F.length;if(!n){$('insList').innerHTML='<li>No titles match the current filters.</li>';return}
+  const L=[],kc=top(count(F.filter(r=>r.c!=='Unknown'),r=>r.c),3),yc=top(count(F,r=>r.ry),1)[0],ac=top(count(F.filter(r=>r.ya),r=>r.ya),1)[0];
+  const rc=top(count(F,r=>r.r),2),tg=top(count(F,r=>r.g),3),mvp=F.filter(r=>r.t===0).length/n*100;
+  L.push(`<b>${fmt(n)}</b> titles selected: ${mvp.toFixed(0)}% movies, ${(100-mvp).toFixed(0)}% TV shows.`);
+  if(kc.length)L.push(`Top origin${kc.length>1?'s':''}: ${kc.map(x=>`${x[0]} (${fmt(x[1])})`).join(', ')} — together ${(kc.reduce((a,x)=>a+x[1],0)/n*100).toFixed(0)}% of the selection.`);
+  L.push(`Most titles were released in <b>${yc[0]}</b> (${fmt(yc[1])}); ${(F.filter(r=>r.ry>=2015).length/n*100).toFixed(0)}% were released in 2015 or later.`);
+  if(ac)L.push(`Peak addition year to Netflix: <b>${ac[0]}</b> (${fmt(ac[1])} titles). 2021 is a partial year.`);
+  L.push(`Most common ratings: ${rc.map(x=>`${x[0]} (${(x[1]/n*100).toFixed(0)}%)`).join(', ')}. Leading genres: ${tg.map(x=>x[0]).join(', ')}.`);
+  $('insList').innerHTML=L.map(x=>`<li>${x}</li>`).join('');
+}
+function renderChips(){
+  const lab={type:v=>TYPES[v],c:v=>'Country: '+v,r:v=>'Rating: '+v,g:v=>'Genre: '+v,a:v=>'Audience: '+v,q:v=>'Search: '+v};
+  const ch=[];if(S.type>=0)ch.push(['type',lab.type(S.type)]);['c','r','g','a','q'].forEach(k=>{if(S[k])ch.push([k,lab[k](S[k])])});
+  if(S.y0!==1925||S.y1!==2021)ch.push(['y','Years '+S.y0+'–'+S.y1]);
+  $('chips').innerHTML=ch.map(x=>`<span class="chip" data-k="${x[0]}">${x[1]} ✕</span>`).join('');
+  document.querySelectorAll('.chip').forEach(el=>el.onclick=()=>{const k=el.dataset.k;if(k==='y'){S.y0=1925;S.y1=2021}else S[k]=S0[k];sync();page=0;update()});
+}
+
+// ---------- table ----------
+const COLS=[['ti','Title'],['t','Type'],['c','Country'],['d','Director'],['ry','Released'],['ya','Added'],['r','Rating'],['dv','Duration'],['gs','Genres']];
+$('thead').innerHTML='<tr>'+COLS.map(c=>`<th data-k="${c[0]}">${c[1]}</th>`).join('')+'</tr>';
+document.querySelectorAll('th').forEach(th=>th.onclick=()=>{const k=th.dataset.k;sortDir=(sortKey===k)?-sortDir:1;sortKey=k;page=0;renderTable()});
+$('prev').onclick=()=>{if(page>0){page--;renderTable()}};
+$('next').onclick=()=>{if((page+1)*PS<F.length){page++;renderTable()}};
+const esc=s=>String(s).replace(/[&<>"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));
+function renderTable(){
+  const s=[...F].sort((a,b)=>{const x=a[sortKey],y=b[sortKey];return(x>y?1:x<y?-1:0)*sortDir});
+  const p=s.slice(page*PS,page*PS+PS);
+  $('tbody').innerHTML=p.map(r=>`<tr><td><b>${esc(r.ti)}</b></td><td><span class="tag" style="background:${r.t?css('--tv'):css('--accent')}">${TYPES[r.t]}</span></td><td>${esc(r.c)}</td><td>${esc(r.d)}</td><td>${r.ry}</td><td>${r.ya||''}</td><td>${r.r}</td><td>${r.dv} ${r.t?(r.dv>1?'seasons':'season'):'min'}</td><td>${esc(r.gs.replace(/\|/g,', '))}</td></tr>`).join('');
+  const pages=Math.max(1,Math.ceil(F.length/PS));$('pageInfo').textContent=`Page ${page+1} / ${pages}`;
+  $('tCount').textContent=`· ${fmt(F.length)} rows`;
+}
+
+function update(){
+  F=ROWS.filter(r=>(S.type<0||r.t===S.type)&&(!S.c||r.c===S.c)&&(!S.r||r.r===S.r)&&(!S.g||r.g.includes(S.g))&&(!S.a||r.a===S.a)&&r.ry>=S.y0&&r.ry<=S.y1&&(!S.q||(r.ti+' '+r.d).toLowerCase().includes(S.q)));
+  renderChips();renderKPIs();renderInsights();renderTable();
+  if(F.length)renderCharts();else ids.forEach(i=>CH[i].clear());
+}
+new MutationObserver(update).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});
+matchMedia('(prefers-color-scheme:dark)').addEventListener('change',update);
+update();
+</script>
+</body>
+</html>
